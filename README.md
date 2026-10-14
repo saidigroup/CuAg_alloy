@@ -36,7 +36,7 @@ cd CuAg_alloy
 git lfs pull
 ```
 
-The original production diffusion and viscosity calculations referenced compressed Deep Potential files (with names ending in `c.pb`). Those compressed model files are **not** included to limit repository storage. The example scripts instead permit selection of the corresponding archived uncompressed model files. Results from these examples should not be assumed numerically identical to the original compressed-model production trajectories without validation.
+The original production diffusion and viscosity calculations referenced compressed Deep Potential files (ending in `c.pb`). Those compressed model files are **not** included to limit repository storage. The example scripts instead permit selection of the corresponding archived uncompressed model files. We will make these compressed DNPs available upon request. Do not assume results from these examples are numerically identical to the original compressed-model production trajectories without validation.
 
 ## Representative LAMMPS workflows
 
@@ -53,15 +53,13 @@ lmp -var model /absolute/path/to/CuAg_alloy/potentials/PBEsol/DNPs/Cu_Ag-10-x/Cu
     -in /absolute/path/to/CuAg_alloy/lammps/diffusion/PBEsol/diffusion.in
 ```
 
-The same approach can be used for the PBE model (`Cu_Ag-9-0.pb`) and the representative TPC, viscosity, and EOS inputs. Some scripts require additional runtime files (for example, `data.lmp` or `in.lmp`) and may produce substantial output. Inspect the scripts and adjust the structure, working directory, executable, simulation duration, and resources before running. Model species/type ordering must match the selected LAMMPS input and model.
+You can use the same approach for the PBE model (`Cu_Ag-9-0.pb`) and the representative TPC, viscosity, and EOS inputs. Some scripts require additional runtime files (for example, `data.lmp` or `in.lmp`) and may produce substantial output. Inspect the scripts and adjust the structure, working directory, executable, simulation duration, and resources before running. Model species/type ordering must match the selected LAMMPS input and model.
 
 These files are **representative examples**, not one-command reruns of all simulations reported in the article.
 
 ## DFT EOS reference calculations
 
 Selected EOS VASP `POSCAR` and `INCAR` files are archived for the Cu–Ag compositions studied with PBE and PBEsol. `POTCAR` files are intentionally excluded because their redistribution is governed by the relevant pseudopotential license. Users must supply appropriately licensed VASP potentials and verify species ordering.
-
-**Provenance note:** The archived EOS `INCAR` files are reference inputs. In any future cleanup, changing their electronic convergence setting to `EDIFF = 1E-7` is a normalization of the *repository examples*, not evidence that the original production calculations were performed with that setting. The original production settings should be established from the corresponding VASP output (`OUTCAR` or `vasprun.xml`) if exact historical reproduction is required.
 
 ## Representative Phonopy calculation
 
@@ -83,7 +81,7 @@ The workflows use combinations of **LAMMPS**, **DeePMD-kit**, **VASP** (for refe
 
 ## Citation
 
-If you use this archive, please cite the associated Cu–Ag PBE/PBEsol publication and link to this repository:
+If you use this archive, please cite the associated Cu–Ag PBE/PBEsol publication https://doi.org/10.1021/acs.jpclett.6c02759 and link to this repository:
 
 **Repository:** https://github.com/saidigroup/CuAg_alloy
 
