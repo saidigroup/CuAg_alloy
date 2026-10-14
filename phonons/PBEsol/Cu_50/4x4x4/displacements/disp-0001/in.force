@@ -1,0 +1,21 @@
+units           metal
+atom_style      atomic
+boundary        p p p
+
+read_data       displaced.lmp
+
+pair_style      deepmd /ix3/walsaidi/cma94/Cu_Ag/Cu_Ni_Ag_Pd_Pt_Au_sol/DNPs/Cu_Ag-10-x/Cu_Ag-10-1.pb
+pair_coeff      * * Cu Ag
+
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+thermo          1
+thermo_style    custom step atoms pe press pxx pyy pzz pxy pxz pyz
+
+dump            FORCE all custom 1 forces.dump id type fx fy fz
+dump_modify     FORCE sort id
+
+run             0
+
+undump          FORCE

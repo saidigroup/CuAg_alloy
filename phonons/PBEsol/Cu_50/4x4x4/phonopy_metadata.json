@@ -1,0 +1,26 @@
+{
+  "reference_atoms": 32,
+  "Cu_atoms": 16,
+  "Ag_atoms": 16,
+  "Cu_at_percent": 50.0,
+  "supercell_matrix": [
+    4,
+    4,
+    4
+  ],
+  "supercell_atoms": 2048,
+  "displacement_distance_A": 0.01,
+  "number_of_displacements": 2,
+  "mesh": [
+    30,
+    30,
+    30
+  ],
+  "minimum_frequency_THz": 0.07079288452630117,
+  "number_modes_below_minus_0p10_THz": 0,
+  "model": "/ix3/walsaidi/cma94/Cu_Ag/Cu_Ni_Ag_Pd_Pt_Au_sol/DNPs/Cu_Ag-10-x/Cu_Ag-10-1.pb",
+  "type_mapping": {
+    "1": "Cu",
+    "2": "Ag"
+  }
+}

@@ -1,0 +1,54 @@
+# ---------- EOS relaxation for Cu-Ag with DeepMD ----------
+clear
+units           metal
+dimension       3
+boundary        p p p
+atom_style      atomic
+atom_modify     map array
+
+# ---------- Read structure ----------
+read_data       in.lmp
+
+# ---------- DeepMD potential ----------
+pair_style      deepmd ${model}
+pair_coeff      * * Cu Ag
+
+# ---------- Neighbor settings ----------
+neighbor        3.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+# ---------- Computes ----------
+compute         eng all pe/atom
+compute         eatoms all reduce sum c_eng
+
+# ---------- Relaxation ----------
+reset_timestep  0
+thermo          10
+thermo_style    custom step pe lx ly lz vol press pxx pyy pzz c_eatoms
+
+#fix             1 all box/relax iso 0.0 vmax 0.001
+min_style       cg
+minimize        1.0e-7 1.0e-7 10000 100000
+#unfix           1
+
+run             0
+
+# ---------- Outputs ----------
+variable        natoms equal count(all)
+variable        teng   equal c_eatoms
+variable        lx0    equal lx
+variable        ly0    equal ly
+variable        lz0    equal lz
+variable        ecoh   equal v_teng/v_natoms
+variable        volume equal vol
+
+print "Total energy (eV) = ${teng};"
+print "Number of atoms = ${natoms};"
+print "Lattice constant lx (Angstrom) = ${lx0};"
+print "Lattice constant ly (Angstrom) = ${ly0};"
+print "Lattice constant lz (Angstrom) = ${lz0};"
+print "Cohesive energy (eV/atom) = ${ecoh};"
+print "Volume (Angstrom^3) = ${volume};"
+
+write_data      fin.lmp
+print "All done!"

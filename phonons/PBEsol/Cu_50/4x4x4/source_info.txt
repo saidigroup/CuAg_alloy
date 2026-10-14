@@ -1,0 +1,18 @@
+Composition: Cu_50
+
+Original relaxed structure:
+EOS/PBEsol/Cu_50/V_1/fin.lmp
+
+PBEsol DNP:
+/ix3/walsaidi/cma94/Cu_Ni_Ag_Pd_Pt_Au_sol/DNPs/Cu_Ag-10-x/Cu_Ag-10-1.pb
+
+LAMMPS element mapping:
+type 1 = Cu
+type 2 = Ag
+
+Phonopy supercell:
+4 x 4 x 4
+
+Purpose:
+Harmonic vibrational free-energy calculation using the exact relaxed V_1
+structure from the PBEsol solid EOS / energetic calculations.

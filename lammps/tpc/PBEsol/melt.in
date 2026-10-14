@@ -1,0 +1,202 @@
+# ---------- system & model ----------
+clear
+units           metal
+boundary        p p p
+atom_style      atomic
+box             tilt large   # harmless; ignored in newer LAMMPS
+
+read_data       data.lmp
+timestep        0.004
+newton          on
+
+# --- DeepMD potential (set to your model) ---
+pair_style      deepmd ${model}
+# Map type IDs to species in the model’s type_map.json
+pair_coeff      * *
+
+neighbor        2.0 bin
+neigh_modify    delay 0 every 1 check yes
+
+# ---------- thermodynamic targets ----------
+variable        Tm       equal 1040          # replace with your guess
+variable        Tm2      equal 1.40*v_Tm
+variable        Tm3      equal 1.35*v_Tm
+variable        Tm_melt  equal v_Tm*1.03
+variable        Press    equal 1.01325
+
+thermo          500
+
+# ---------- element/type counts ----------
+group           t1 type 1
+group           t2 type 2
+group           t3 type 3
+group           t4 type 4
+group           t5 type 5
+group           t6 type 6
+
+variable        n1 equal count(t1)
+variable        n2 equal count(t2)
+variable        n3 equal count(t3)
+variable        n4 equal count(t4)
+variable        n5 equal count(t5)
+variable        n6 equal count(t6)
+variable        nTot equal atoms
+
+print "Total atoms: ${nTot}" file element_counts.dat screen no
+print "Type1 count: ${n1}"   file element_counts.dat screen no append yes
+print "Type2 count: ${n2}"   file element_counts.dat screen no append yes
+print "Type3 count: ${n3}"   file element_counts.dat screen no append yes
+print "Type4 count: ${n4}"   file element_counts.dat screen no append yes
+print "Type5 count: ${n5}"   file element_counts.dat screen no append yes
+print "Type6 count: ${n6}"   file element_counts.dat screen no append yes
+
+# ---------- relax single crystal ----------
+fix             1 all box/relax iso ${Press} vmax 0.001
+min_style       cg
+minimize        1e-25 1e-25 500000 1000000
+
+# --- per-atom energy snapshot after minimization ---
+compute         peatom all pe/atom
+run             0
+write_dump      all custom pe_min.dump id type x y z c_peatom
+
+# ---------- build two-phase slab along z ----------
+replicate       1 1 2
+variable        lz equal "lz"
+variable        z_cen equal ${lz}/2
+region          liquid block INF INF INF INF INF ${z_cen} units box
+group           liquid region liquid
+group           solid subtract all liquid
+
+# Phase temperatures
+compute         LiquidTemp liquid temp
+compute         SolidTemp  solid  temp
+
+# ---- PE/atom per partition ----
+compute         PEs solid  reduce sum c_peatom
+compute         PEl liquid reduce sum c_peatom
+variable        pe_solid  equal c_PEs/count(solid)
+variable        pe_liquid equal c_PEl/count(liquid)
+
+thermo_style    custom step etotal pe ke press vol pxx pyy pzz temp c_LiquidTemp c_SolidTemp
+
+# =======================
+# 1) Equilibrate near Tm
+# =======================
+reset_timestep  0
+unfix           1
+run             0
+velocity        all create ${Tm} 11111111 rot no dist gaussian
+
+# ---- FCC lattice parameter ----
+variable        a_fcc       equal (4.0*vol/atoms)^(1.0/3.0)
+variable        a_fcc_solid equal (4.0*(vol*(${z_cen}/lz))/count(solid))^(1.0/3.0)
+
+thermo_style    custom step etotal pe ke press vol temp c_LiquidTemp c_SolidTemp v_a_fcc
+fix             aout all ave/time 50 50 2500 v_a_fcc v_a_fcc_solid file a_fcc_step1.dat
+
+fix             1 all npt temp ${Tm} ${Tm} $(100*dt) iso ${Press} ${Press} $(1000*dt) drag 0.2
+fix_modify      1 temp SolidTemp
+dump            d1 all custom 1000 Step1_Equi.* id type x y z
+run             5000
+unfix           1
+unfix           aout
+undump          d1
+write_data      heat1
+
+thermo_style    custom step etotal pe ke press vol pxx pyy pzz temp c_LiquidTemp c_SolidTemp
+
+# =========================
+# 2) Melt the liquid half
+# =========================
+reset_timestep  0
+timestep        0.0025
+velocity        liquid create ${Tm2} 11111111 rot no dist gaussian
+
+fix             1 liquid nvt temp ${Tm3} ${Tm3} $(50*dt) drag 0.2
+fix_modify      1 temp LiquidTemp
+dump            d2 all custom 1000 Step2_Heat.* id type x y z
+run             6000
+unfix           1
+undump          d2
+write_data      melt1
+
+# ===========================
+# 3) Cool liquid back to Tm
+# ===========================
+reset_timestep  0
+timestep        0.0030
+fix             1 liquid nvt temp ${Tm_melt} ${Tm_melt} $(50*dt) drag 0.2
+fix_modify      1 temp LiquidTemp
+dump            d3 all custom 1000 Step3_Cool.* id type x y z
+run             6000
+unfix           1
+undump          d3
+write_data      cool1
+
+# ============================================================
+# 4) FINAL NPH COEXISTENCE + diagnostics
+# ============================================================
+reset_timestep  0
+timestep        0.002
+neighbor        3.0 bin
+thermo_modify   flush yes
+echo            both
+
+print "== NPH: installing barostat =="
+fix             nph all nph iso ${Press} ${Press} $(1000*dt)
+
+print "== NPH: pre-init run0 =="
+run             0 post no
+
+# ---- (A) solid vs liquid via centrosymmetry ----
+print "== NPH: defining centro/atom compute =="
+compute         cs all centro/atom 12
+variable        cs_cut equal 2.5
+variable        solidflag atom "c_cs < v_cs_cut"
+compute         ssum all reduce sum v_solidflag
+variable        f_solid equal c_ssum/atoms
+
+print "== NPH: run0 after centro/atom =="
+run             0 post no
+
+# ---- (B) interface profile ----
+print "== NPH: define z bins =="
+#compute         zbin all chunk/atom bin/1d z lower 0.5 units box
+compute         zbin all chunk/atom bin/1d z lower 0.02 units reduced
+fix             prof all ave/chunk 50 50 2500 zbin v_solidflag file nph_solid_profile.dat
+
+print "== NPH: run0 after ave/chunk =="
+run             0 post no
+
+# ---- (C) timeseries ----
+variable T  equal temp
+variable P  equal press
+variable Vol equal vol
+variable PE equal pe
+variable KE equal ke
+
+fix nphlog all ave/time 50 50 2500 v_f_solid c_LiquidTemp c_SolidTemp v_T v_P v_Vol v_PE v_KE v_pe_solid v_pe_liquid file nph_timeseries.dat
+    
+print "== NPH: run0 after ave/time =="
+run             0 post no
+
+# ---- (D) MSD for liquid ----
+compute         msdL liquid msd
+fix             msdout liquid ave/time 100 50 5000 c_msdL[4] file nph_msd_liquid.dat
+
+# ---- production coexistence run ----
+dump            dnph all custom 1000 Melt_nph.* id type x y z
+thermo          2500
+print "== NPH: ENTERING PRODUCTION RUN =="
+run             50000
+print "== NPH: DONE =="
+
+# save final state
+write_data      two_phase
+
+# ---- cleanup ----
+unfix           prof
+unfix           nphlog
+unfix           msdout
+unfix           nph

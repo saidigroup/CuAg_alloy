@@ -1,0 +1,35 @@
+SYSTEM = EOS static
+
+PREC   = A
+ENCUT  = 400
+GGA    = PS
+
+ISYM   = 0
+ISPIN  = 1
+
+ISTART = 0
+ICHARG = 2
+
+ALGO   = Fast
+LREAL  = .FALSE.
+NELM   = 150
+NELMIN = 4
+
+EDIFF  = 1E-6
+
+ISMEAR = 1
+SIGMA  = 0.15
+
+IBRION = 2
+NSW    = 0
+ISIF   = 2
+
+PSTRESS  = 0.0
+KSPACING = 0.24
+KGAMMA   = .FALSE.
+
+LWAVE  = .FALSE.
+LCHARG = .FALSE.
+
+NCORE  = 4
+KPAR   = 1

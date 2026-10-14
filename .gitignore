@@ -1,0 +1,9 @@
+*.log
+slurm-*
+*.npy
+*.npz
+*.raw
+*.tar
+*.tgz
+*.gz
+*.xml

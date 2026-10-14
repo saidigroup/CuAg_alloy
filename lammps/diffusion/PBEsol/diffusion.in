@@ -1,0 +1,103 @@
+clear
+# -------------------------------------------------------------
+#   Cu-Ag liquid diffusion run (DeepMD)
+#   Robust for pure Cu, pure Ag, and binary Cu-Ag systems.
+# -------------------------------------------------------------
+
+# ---------- USER SETTINGS ----------
+variable datafile    string   in.lmp          # data file used for this replica; setup script copies final.lmp -> in.lmp
+variable Tinit       equal    1700            # K, velocity initialization / initial NPT target
+variable Teq         equal    1620            # K, target temperature for diffusion
+variable Ptarget     equal    0.0             # bar in LAMMPS metal units
+variable tdampT      equal    0.1             # ps
+variable pdampP      equal    1.0             # ps
+variable dt          equal    0.001           # ps, 1 fs
+variable nequil      equal    200000          # 200 ps NPT
+variable nhold       equal    20000           # 20 ps NVT hold
+variable nprod       equal    1000000         # 1000 ps NVE production
+variable nsample     equal    100             # 0.1 ps MSD sampling
+variable seed        equal    4928459         # setup script can patch this per replica
+# -----------------------------------
+
+echo            both
+units           metal
+atom_style      atomic
+boundary        p p p
+
+read_data       ${datafile}
+
+# Groups by species. The data files should preserve type 1 = Cu, type 2 = Ag.
+group Cu type 1
+group Ag type 2
+variable nCu equal count(Cu)
+variable nAg equal count(Ag)
+print "Species counts: Cu=${nCu} Ag=${nAg}"
+
+# -------------------- INTERATOMIC POTENTIAL -------------------
+pair_style      deepmd ${model}
+pair_coeff      * * Cu Ag
+# --------------------------------------------------------------
+
+neighbor        2.0 bin
+neigh_modify    delay 0 every 1 check yes
+timestep        ${dt}
+thermo_style    custom step temp press pe ke etotal vol
+thermo          1000
+thermo_modify   flush yes
+
+# IMPORTANT: create velocities explicitly.  Starting NPT from T=0 can generate
+# coherent center-of-mass drift, especially for pure-element endpoints.
+velocity        all create ${Tinit} ${seed} mom yes rot no dist gaussian
+velocity        all zero linear
+
+# ------------------- EQUILIBRATION PHASE ----------------------
+fix             EQ all npt temp ${Tinit} ${Teq} ${tdampT} iso ${Ptarget} ${Ptarget} ${pdampP}
+fix             MOM all momentum 100 linear 1 1 1
+run             ${nequil}
+unfix           MOM
+unfix           EQ
+
+fix             HOLD all nvt temp ${Teq} ${Teq} ${tdampT}
+fix             MOM all momentum 100 linear 1 1 1
+run             ${nhold}
+unfix           MOM
+unfix           HOLD
+
+# -------------------- PRODUCTION (MSD) ------------------------
+# Remove residual center-of-mass momentum once before production.  Do not use
+# fix momentum during production unless testing shows it is needed.
+velocity        all zero linear
+reset_timestep  0
+
+fix             INT all nve
+
+# com yes subtracts residual center-of-mass drift from the MSD.  This is crucial
+# for pure endpoints, and is harmless for equilibrium binary liquids.
+compute         MSDall all msd com yes
+compute         MSDcu  Cu  msd com yes
+compute         MSDag  Ag  msd com yes
+
+fix             A1 all ave/time ${nsample} 1 ${nsample} c_MSDall[1] c_MSDall[2] c_MSDall[3] c_MSDall[4] file msd_all.dat
+fix             A2 all ave/time ${nsample} 1 ${nsample} c_MSDcu[1]  c_MSDcu[2]  c_MSDcu[3]  c_MSDcu[4]  file msd_Cu.dat
+fix             A3 all ave/time ${nsample} 1 ${nsample} c_MSDag[1]  c_MSDag[2]  c_MSDag[3]  c_MSDag[4]  file msd_Ag.dat
+
+# Wrapped coordinates are for visualization.  Unwrapped coordinates are for sanity checks only.
+dump            Dwrap all custom ${nsample} traj_wrapped.lammpstrj id type x y z vx vy vz
+dump_modify     Dwrap sort id
+dump            Dunwrap all custom ${nsample} traj_unwrapped.lammpstrj id type xu yu zu vx vy vz
+dump_modify     Dunwrap sort id
+
+run             ${nprod}
+
+write_data      final_diffusion.lmp
+
+unfix           INT
+unfix           A1
+unfix           A2
+unfix           A3
+undump          Dwrap
+undump          Dunwrap
+
+# Output notes:
+# msd_*.dat columns: timestep, <r^2>, <dx^2>, <dy^2>, <dz^2>
+# Convert timestep to ps using t = timestep * ${dt}; D = slope(<r^2> vs t)/6 * 1e-8.

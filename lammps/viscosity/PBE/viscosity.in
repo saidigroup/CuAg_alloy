@@ -1,0 +1,118 @@
+clear
+# -------------------------------------------------------------
+#   Cu-Ag liquid viscosity run by Green-Kubo stress autocorrelation
+#   Robust for folder-patched target temperatures.
+# -------------------------------------------------------------
+
+echo            both
+units           metal
+atom_style      atomic
+boundary        p p p
+
+read_data       in.lmp
+
+# Groups are useful for checking composition in the log; viscosity uses all atoms.
+group Cu type 1
+group Ag type 2
+variable nCu equal count(Cu)
+variable nAg equal count(Ag)
+print "Species counts: Cu=${nCu} Ag=${nAg}"
+
+# ---------- Potential ----------
+pair_style      deepmd ${model}
+pair_coeff      * * Cu Ag
+
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+# ---------- User controls ----------
+# The setup script patches T from the nearest parent folder named T####.
+variable        T        equal 1275.0     # K
+variable        P        equal 0.0        # bar in LAMMPS metal units
+variable        dt       equal 0.001      # ps for GK production
+variable        seed     equal 4928459
+
+# Equilibration lengths.  Note: equilibration timestep below is 0.002 ps.
+variable        n_npt    equal 40000      # 80 ps NPT at timestep 0.002 ps
+variable        n_nvt    equal 100000     # 200 ps NVT at timestep 0.002 ps
+variable        n_nve    equal 20000      # 40 ps NVE pre-GK at timestep 0.002 ps
+
+# Thermostat / barostat damping (ps)
+variable        tdamp    equal 0.1
+variable        pdamp    equal 1.0
+
+# GK sampling controls
+variable        s        equal 10         # sample every 10 steps = 0.01 ps at dt=0.001 ps
+variable        p        equal 5000       # 5000 samples -> 50 ps correlation window
+variable        d        equal ${s}*${p}  # output stride for ave/correlate
+variable        n_prod   equal 5000000    # 5 ns production at timestep 0.001 ps
+
+# ---------- Thermo ----------
+timestep        ${dt}
+thermo_style    custom step temp press vol density pe ke etotal pxy pxz pyz
+thermo          ${d}
+thermo_modify   flush yes
+
+# ---------- Initialization ----------
+# Explicit velocities are required because write_data final.lmp generally does not
+# contain velocities.  Starting from zero velocities can generate bad COM drift.
+velocity        all create ${T} ${seed} mom yes rot no dist gaussian
+velocity        all zero linear
+
+# ---------- Equilibration ----------
+timestep        0.002
+
+fix             NPT all npt temp ${T} ${T} ${tdamp} iso ${P} ${P} ${pdamp}
+fix             MOM all momentum 100 linear 1 1 1
+run             ${n_npt}
+unfix           MOM
+unfix           NPT
+
+fix             NVT all nvt temp ${T} ${T} ${tdamp}
+fix             MOM all momentum 100 linear 1 1 1
+run             ${n_nvt}
+unfix           MOM
+unfix           NVT
+
+fix             PRE all nve
+fix             MOM all momentum 100 linear 1 1 1
+run             ${n_nve}
+unfix           MOM
+unfix           PRE
+
+# ---------- Green-Kubo viscosity ----------
+# Do not apply fix momentum during GK production; remove residual COM momentum once.
+velocity        all zero linear
+timestep        ${dt}
+reset_timestep  0
+
+fix             INT all nve
+
+# LAMMPS Howto_viscosity uses full off-diagonal stress components (pxy, pxz, pyz)
+# and integrates their autocorrelation. In metal units:
+# pressure = bar, time = ps, volume = A^3, conversion = 1e-32.
+variable        V        equal vol
+variable        pxy      equal pxy
+variable        pxz      equal pxz
+variable        pyz      equal pyz
+
+fix             SS all ave/correlate ${s} ${p} ${d} v_pxy v_pxz v_pyz type auto file S0St.dat ave running
+
+variable        kB       equal 1.380649e-23
+variable        convert  equal 1.0e-32
+variable        scale    equal ${convert}/(${kB}*${T})*${V}*${s}*${dt}
+
+variable        eta_xy   equal trap(f_SS[3])*${scale}
+variable        eta_xz   equal trap(f_SS[4])*${scale}
+variable        eta_yz   equal trap(f_SS[5])*${scale}
+variable        eta      equal (v_eta_xy+v_eta_xz+v_eta_yz)/3.0
+
+thermo_style    custom step temp press vol density pxy pxz pyz v_eta_xy v_eta_xz v_eta_yz v_eta
+run             ${n_prod}
+
+print           "GK_VISCOSITY ${eta} Pa*s at T=${T} K"
+
+unfix           SS
+unfix           INT
+
+write_data      final_viscosity.lmp
