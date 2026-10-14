@@ -1,38 +1,94 @@
-# Cu–Ag PBE/PBEsol Deep Potential reproducibility archive
+# Cu–Ag Alloy: PBE and PBEsol Computational Archive
 
-This repository provides six Cu–Ag Deep Potential models, their DeePMD training configurations and learning curves, selected simulation/analysis scripts, and EOS structures for the accompanying Cu–Ag melting-depression study.
+This repository accompanies a computational study of melting and alloy thermodynamics in the Cu–Ag binary system using density-functional-theory (DFT)-trained Deep Potential models. It provides selected input files, model checkpoints, training records, and analysis scripts supporting comparisons between the PBE and PBEsol exchange–correlation functionals.
 
-## Potential models
+**Scope:** This is a curated reproducibility archive containing the trained potentials and representative computational workflows. It is **not** a complete copy of every production trajectory, DFT calculation, or intermediate training dataset.
 
-- PBE ensemble: `potentials/PBE/DNPs/Cu_Ag-9-x/Cu_Ag-9-{0,1,2}.pb`
-- PBEsol ensemble: `potentials/PBEsol/DNPs/Cu_Ag-10-x/Cu_Ag-10-{0,1,2}.pb`
-- Principal models described in the study: PBE `Cu_Ag-9-0.pb`; PBEsol `Cu_Ag-10-1.pb`.
-- The binary `.pb` model files are tracked with Git LFS. Run `git lfs pull` after cloning if needed.
-- Corresponding `out.json` (DeePMD effective training settings) and `lcurve.out` (learning curves) are under `training/PBE/` and `training/PBEsol/`, respectively.
+## Repository contents
 
-## VASP reference calculations
+| Location | Contents |
+| --- | --- |
+| `potentials/PBE/DNPs/Cu_Ag-9-x/` | Three frozen PBE Deep Potential models (`Cu_Ag-9-0.pb` through `Cu_Ag-9-2.pb`) |
+| `potentials/PBEsol/DNPs/Cu_Ag-10-x/` | Three frozen PBEsol models (`Cu_Ag-10-0.pb` through `Cu_Ag-10-2.pb`) |
+| `training/PBE/`, `training/PBEsol/` | Effective training configurations (`out.json`) and learning curves (`lcurve.out`) for the six models |
+| `training/preprocessing/` | Cu–Ag training-data preprocessing utility |
+| `lammps/tpc/` | Representative two-phase coexistence (TPC) melting inputs for PBE and PBEsol |
+| `lammps/diffusion/` | Representative diffusion inputs for PBE and PBEsol |
+| `lammps/viscosity/` | Representative viscosity inputs for PBE and PBEsol |
+| `lammps/eos/` | Representative LAMMPS equation-of-state input |
+| `structures/TPC/`, `structures/liquid/` | Representative Cu50Ag50 LAMMPS starting structures |
+| `dft/eos/`, `eos/` | Selected VASP EOS reference inputs and structures, organized by functional and composition |
+| `phonons/PBEsol/Cu_50/4x4x4/` | Representative PBEsol Cu50Ag50 Phonopy example, including thermal properties and, where present, displacement force evaluations |
+| `ordered_solids/phonons/` | Supporting Phonopy drivers and analysis utilities |
+| `transport/`, `thermophysical/`, `coexistence/` | Selected workflow and postprocessing scripts |
+| `tools/` | Repository utilities and input-audit scripts |
 
-- `dft/aimd/INCAR.ref.AIMD` is the supplied **reference/template** for AIMD data generation, not a claim that each historical AIMD run used identical values.
-- It contains `GGA=PS` for PBEsol; use `GGA=PE` for PBE. Set `TEBEG` and `TEEND` to the intended run temperature. Check the actual run configuration before reusing.
-- `dft/eos/` contains the staged fixed-volume EOS POSCAR configurations and representative calculation settings. Five Cu fractions (0, 25, 50, 75, 100 at.% Cu) and nine volume factors per functional are expected; selected base cells are also present.
-- **POTCAR files are deliberately excluded** because VASP PAW datasets must be obtained from a licensed source. The PAW dataset selections must be matched to those documented in the manuscript/SI and verified against the original calculations.
+Some paths retain the original campaign-oriented directory organization. Consult individual files to determine the intended execution directory and input dependencies.
 
-## Cu–Ag dataset filtering
+## Models and file storage
 
-- `training/preprocessing/dpdata_CuAg_v6.py` is the user-supplied Python 3 Cu–Ag-only `dpdata` filtering/export utility.
-- It restricts frames to elements Cu and Ag, applies electronic/force/energy filters, and generates DeepMD raw/npy datasets.
-- It uses DeepMD `type_map = ["Cu", "Ag"]`. Confirm that the selected models and LAMMPS atom-type mappings use this ordering before deploying.
-- Example to inspect options (requires `numpy` and `dpdata`): `python training/preprocessing/dpdata_CuAg_v6.py --help`.
-- The default output directory is a relative path; **set `--base-out` explicitly** when running. The exact settings and input frames used for the published training run have not been independently recovered here.
+Six **uncompressed** frozen Deep Potential models are distributed using **Git Large File Storage (Git LFS)**. Install Git LFS before cloning or pulling model binaries:
 
-## Other workflows
+```bash
+git lfs install
+git clone https://github.com/saidigroup/CuAg_alloy.git
+cd CuAg_alloy
+git lfs pull
+```
 
-The staged collection includes representative TPC, EOS, diffusion, viscosity and associated analysis files. Some scripts may retain original HPC paths or require external starting structures; see `INPUT_DEPENDENCY_AUDIT.tsv` after running `tools/audit_inputs.py`.
+The original production diffusion and viscosity calculations referenced compressed Deep Potential files (with names ending in `c.pb`). Those compressed model files are **not** included to limit repository storage. The example scripts instead permit selection of the corresponding archived uncompressed model files. Results from these examples should not be assumed numerically identical to the original compressed-model production trajectories without validation.
 
-## Reproducibility limits
+## Representative LAMMPS workflows
 
-The archive is intended as a compact set of representative inputs, trained models, and methods. It does not claim to contain every original AIMD frame, all MD trajectories, or a completely self-contained execution environment. Do not imply that an original LAMMPS input is portable until its data/restart/model paths have been checked. Original training dataset provenance and full reference AIMD settings still warrant confirmation.
+The archived LAMMPS inputs use a command-line variable for the model:
+
+```lammps
+pair_style deepmd ${model}
+```
+
+For a representative PBEsol diffusion calculation, from a fresh working directory with a compatible Cu–Ag `in.lmp` structure available under that filename:
+
+```bash
+lmp -var model /absolute/path/to/CuAg_alloy/potentials/PBEsol/DNPs/Cu_Ag-10-x/Cu_Ag-10-1.pb \
+    -in /absolute/path/to/CuAg_alloy/lammps/diffusion/PBEsol/diffusion.in
+```
+
+The same approach can be used for the PBE model (`Cu_Ag-9-0.pb`) and the representative TPC, viscosity, and EOS inputs. Some scripts require additional runtime files (for example, `data.lmp` or `in.lmp`) and may produce substantial output. Inspect the scripts and adjust the structure, working directory, executable, simulation duration, and resources before running. Model species/type ordering must match the selected LAMMPS input and model.
+
+These files are **representative examples**, not one-command reruns of all simulations reported in the article.
+
+## DFT EOS reference calculations
+
+Selected EOS VASP `POSCAR` and `INCAR` files are archived for the Cu–Ag compositions studied with PBE and PBEsol. `POTCAR` files are intentionally excluded because their redistribution is governed by the relevant pseudopotential license. Users must supply appropriately licensed VASP potentials and verify species ordering.
+
+**Provenance note:** The archived EOS `INCAR` files are reference inputs. In any future cleanup, changing their electronic convergence setting to `EDIFF = 1E-7` is a normalization of the *repository examples*, not evidence that the original production calculations were performed with that setting. The original production settings should be established from the corresponding VASP output (`OUTCAR` or `vasprun.xml`) if exact historical reproduction is required.
+
+## Representative Phonopy calculation
+
+The `phonons/PBEsol/Cu_50/4x4x4/` example concerns a **4 × 4 × 4 supercell** for Cu50Ag50 treated using the PBEsol-trained potential. `thermal_properties.dat` contains temperature-dependent harmonic thermodynamic properties, including the **700 K** evaluation point. The 700 K value is a thermodynamic evaluation temperature, not the temperature of the underlying finite-displacement force calculation.
+
+The example includes the unit cell, displacement description, driver, metadata, and available displacement/force files. The large `phonopy_params.yaml` archive (approximately 1.06 GB) is intentionally omitted. Users should inspect the driver and force/displacement completeness before assuming they can regenerate every reported Phonopy output exactly.
+
+## Reproducibility and limitations
+
+- Production melting, transport, and phase-equilibrium datasets may involve multiple compositions, temperatures, and independent replicas; only selected examples are included here.
+- PBE and PBEsol potentials must not be interchanged when attempting to reproduce functional-specific results.
+- Exact results can depend on software versions, initial configurations, random seeds, runtime parameters, and compressed versus uncompressed potential evaluation.
+- Archived VASP inputs do not include pseudopotentials (`POTCAR`).
+- Individual analysis scripts may assume original HPC directory layouts; review paths and dependencies before running.
 
 ## Software
 
-The study used DeePMD-kit 2.2.10 and VASP 6.4.1 for the methods described in the manuscript/SI. Processing requires Python 3 and packages imported by each script; LAMMPS runs require a compatible DeePMD interface. Full version pinning, structure dependencies, and executable environment specifications should be added after the final audit.
+The workflows use combinations of **LAMMPS**, **DeePMD-kit**, **VASP** (for reference DFT inputs), **Phonopy**, and Python analysis packages. Refer to the paper, supporting information, and individual scripts for methodology and version details. No universal environment specification is supplied here.
+
+## Citation
+
+If you use this archive, please cite the associated Cu–Ag PBE/PBEsol publication and link to this repository:
+
+**Repository:** https://github.com/saidigroup/CuAg_alloy
+
+A versioned release/archival DOI can be added once available. For reproducible referencing, record the Git commit or release tag used.
+
+## License and acknowledgments
+
+No software or data redistribution license is asserted by this README. The repository maintainers should add an appropriate `LICENSE` file or licensing statement before encouraging third-party reuse. VASP pseudopotentials are not redistributed.

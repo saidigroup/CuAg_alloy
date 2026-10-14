@@ -15,7 +15,7 @@ LREAL  = .FALSE.
 NELM   = 150
 NELMIN = 4
 
-EDIFF  = 1E-6
+EDIFF  = 1E-7
 
 ISMEAR = 1
 SIGMA  = 0.15
