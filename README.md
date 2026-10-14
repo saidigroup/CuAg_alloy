@@ -81,11 +81,11 @@ The workflows use combinations of **LAMMPS**, **DeePMD-kit**, **VASP** (for refe
 
 ## Citation
 
-If you use this archive, please cite the associated Cu–Ag PBE/PBEsol publication https://doi.org/10.1021/acs.jpclett.6c02759 and link to this repository:
+If you use this archive, please cite the associated Cu–Ag PBE/PBEsol publication ( https://doi.org/10.1021/acs.jpclett.6c02759 ) and link to this repository:
 
 **Repository:** https://github.com/saidigroup/CuAg_alloy
 
-A versioned release/archival DOI can be added once available. For reproducible referencing, record the Git commit or release tag used.
+For reproducible referencing, record the Git commit or release tag used.
 
 ## License and acknowledgments
 
